@@ -1,0 +1,76 @@
+name: "Reusable: Report CI Failure"
+
+on:
+  workflow_call:
+    inputs:
+      failed-job:
+        description: "Which job failed (test or deploy)"
+        type: string
+        required: true
+      fix-instructions:
+        description: "Custom instructions for Copilot agent"
+        type: string
+        default: "Investigate the failing CI. Look at test output and build logs. Push a fix to a new branch and open a PR."
+    secrets:
+      PERSO_GITHUB_TOKEN:
+        required: true
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create issue or comment on existing
+        env:
+          GH_TOKEN: ${{ secrets.PERSO_GITHUB_TOKEN }}
+        run: |
+          REPO="${{ github.repository }}"
+          SHA="${{ github.sha }}"
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          FAILED_JOB="${{ inputs.failed-job }}"
+
+          TITLE="❌ CI failure: ${FAILED_JOB} — $(date -u +%Y-%m-%d)"
+
+          BODY=$(cat <<EOF
+          ## CI Pipeline Failed
+
+          | Field | Value |
+          |---|---|
+          | **Job** | \`${FAILED_JOB}\` |
+          | **Commit** | [\`${SHA:0:7}\`](${RUN_URL}) |
+          | **Run** | [View logs](${RUN_URL}) |
+          | **Trigger** | \`${{ github.event_name }}\` on \`${{ github.ref_name }}\` |
+
+          ### Next steps
+          Copilot agent has been assigned to investigate and open a fix PR.
+          EOF
+          )
+
+          # Check for existing open ci-failure issue
+          EXISTING=$(gh issue list --repo "$REPO" --label ci-failure --state open --limit 1 --json number -q '.[0].number // empty' 2>/dev/null || echo "")
+
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "$REPO" --body "$BODY"
+            ISSUE_NUMBER="$EXISTING"
+          else
+            ISSUE_URL=$(gh issue create --repo "$REPO" --title "$TITLE" --body "$BODY" --label "bug,ci-failure")
+            ISSUE_NUMBER=$(echo "$ISSUE_URL" | grep -oP '\d+$')
+          fi
+
+          # Assign Copilot agent to fix
+          curl -s -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${REPO}/issues/${ISSUE_NUMBER}/assignees" \
+            -d "$(jq -n \
+              --arg repo "$REPO" \
+              --arg instructions "${{ inputs.fix-instructions }}" \
+              '{
+                assignees: ["copilot-swe-agent[bot]"],
+                agent_assignment: {
+                  target_repo: $repo,
+                  base_branch: "main",
+                  custom_instructions: $instructions
+                }
+              }'
+            )"

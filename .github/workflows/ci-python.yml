@@ -1,0 +1,33 @@
+name: "Reusable: Python CI"
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        type: string
+        default: "3.12"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python-version }}
+
+      - run: pip install pytest
+
+      - name: Run tests
+        env:
+          WORKOS_CLIENT_ID: test
+          WORKOS_API_KEY: test
+          WORKOS_COOKIE_PASSWORD: test-secret-32-chars-minimum-ok!
+          STRIPE_SECRET_KEY: sk_test_fake
+          STRIPE_WEBHOOK_SECRET: whsec_test_secret
+          DB_HOST: localhost
+          DB_USER: test
+          DB_PASSWORD: test
+          DB_NAME: test
+        run: pytest tests/ -v --tb=short

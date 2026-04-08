@@ -1,0 +1,89 @@
+name: "Reusable: Deploy Python"
+
+on:
+  workflow_call:
+    inputs:
+      app-name:
+        description: "Remote directory name under /home/<user>/"
+        type: string
+        required: true
+      remote-env-vars:
+        description: "KEY=VALUE lines to inject/update in server .env"
+        type: string
+        default: ""
+    secrets:
+      SSH_PRIVATE_KEY:
+        required: true
+      CPANEL_HOST:
+        required: true
+      CPANEL_USERNAME:
+        required: true
+      SSH_PORT:
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p ${{ secrets.SSH_PORT }} ${{ secrets.CPANEL_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Rsync
+        run: |
+          SSH="ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT }}"
+          TARGET="${{ secrets.CPANEL_USERNAME }}@${{ secrets.CPANEL_HOST }}"
+          REMOTE="/home/${{ secrets.CPANEL_USERNAME }}/${{ inputs.app-name }}"
+
+          $SSH $TARGET "mkdir -p ${REMOTE}/tmp"
+
+          rsync -azv --delete -e "$SSH" \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='__pycache__' \
+            --exclude='scripts' \
+            --exclude='venv' \
+            --exclude='.venv' \
+            --exclude='.env' \
+            --exclude='.gitignore' \
+            --exclude='tests' \
+            ./ ${TARGET}:${REMOTE}/
+
+      - name: Inject env vars
+        if: inputs.remote-env-vars != ''
+        run: |
+          SSH="ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT }}"
+          TARGET="${{ secrets.CPANEL_USERNAME }}@${{ secrets.CPANEL_HOST }}"
+          REMOTE="/home/${{ secrets.CPANEL_USERNAME }}/${{ inputs.app-name }}"
+
+          printf '%s\n' "$REMOTE_VARS" > /tmp/env_inject.txt
+
+          scp -i ~/.ssh/deploy_key -P ${{ secrets.SSH_PORT }} \
+            /tmp/env_inject.txt ${TARGET}:/tmp/env_inject.txt
+
+          $SSH $TARGET "
+            cd ${REMOTE}
+            while IFS= read -r LINE; do
+              [ -z \"\$LINE\" ] && continue
+              KEY=\"\${LINE%%=*}\"
+              VALUE=\"\${LINE#*=}\"
+              grep -q \"^\${KEY}=\" .env 2>/dev/null && \
+                sed -i \"s|^\${KEY}=.*|\${KEY}=\${VALUE}|\" .env || \
+                echo \"\${KEY}=\${VALUE}\" >> .env
+            done < /tmp/env_inject.txt
+            rm -f /tmp/env_inject.txt
+          "
+        env:
+          REMOTE_VARS: ${{ inputs.remote-env-vars }}
+
+      - name: Restart
+        run: |
+          SSH="ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT }}"
+          TARGET="${{ secrets.CPANEL_USERNAME }}@${{ secrets.CPANEL_HOST }}"
+          REMOTE="/home/${{ secrets.CPANEL_USERNAME }}/${{ inputs.app-name }}"
+          $SSH $TARGET "touch ${REMOTE}/tmp/restart.txt"
