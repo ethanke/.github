@@ -7,10 +7,6 @@ on:
         description: "Remote directory name under /home/<user>/"
         type: string
         required: true
-      remote-env-vars:
-        description: "KEY=VALUE lines to inject/update in server .env"
-        type: string
-        default: ""
     secrets:
       SSH_PRIVATE_KEY:
         required: true
@@ -20,6 +16,8 @@ on:
         required: true
       SSH_PORT:
         required: true
+      ENV_SECRETS:
+        required: false
 
 jobs:
   deploy:
@@ -55,13 +53,13 @@ jobs:
             ./ ${TARGET}:${REMOTE}/
 
       - name: Inject env vars
-        if: inputs.remote-env-vars != ''
+        if: env.ENV_SECRETS != ''
         run: |
           SSH="ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT }}"
           TARGET="${{ secrets.CPANEL_USERNAME }}@${{ secrets.CPANEL_HOST }}"
           REMOTE="/home/${{ secrets.CPANEL_USERNAME }}/${{ inputs.app-name }}"
 
-          printf '%s\n' "$REMOTE_VARS" > /tmp/env_inject.txt
+          printf '%s\n' "$ENV_SECRETS" > /tmp/env_inject.txt
 
           scp -i ~/.ssh/deploy_key -P ${{ secrets.SSH_PORT }} \
             /tmp/env_inject.txt ${TARGET}:/tmp/env_inject.txt
@@ -79,7 +77,7 @@ jobs:
             rm -f /tmp/env_inject.txt
           "
         env:
-          REMOTE_VARS: ${{ inputs.remote-env-vars }}
+          ENV_SECRETS: ${{ secrets.ENV_SECRETS }}
 
       - name: Restart
         run: |
