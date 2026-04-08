@@ -23,6 +23,8 @@ on:
         required: true
       SSH_PORT:
         required: true
+      ENV_SECRETS:
+        required: false
 
 jobs:
   deploy:
@@ -38,9 +40,14 @@ jobs:
       - run: npm ci --include=dev
 
       - name: Create .env
-        run: printf '%s\n' "$ENV_FILE" > .env
+        run: |
+          printf '%s\n' "$ENV_FILE" > .env
+          if [ -n "$ENV_SECRETS" ]; then
+            printf '%s\n' "$ENV_SECRETS" >> .env
+          fi
         env:
           ENV_FILE: ${{ inputs.env-file }}
+          ENV_SECRETS: ${{ secrets.ENV_SECRETS }}
 
       - run: npm run build
 
