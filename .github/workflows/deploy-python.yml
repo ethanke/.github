@@ -50,6 +50,7 @@ jobs:
             --exclude='.env' \
             --exclude='.gitignore' \
             --exclude='tests' \
+            --exclude='tmp' \
             ./ ${TARGET}:${REMOTE}/
 
       - name: Inject env vars
