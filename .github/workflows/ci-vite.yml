@@ -1,0 +1,42 @@
+name: "Reusable: Vite CI"
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        type: string
+        default: "20"
+      env-file:
+        description: ".env content for test/build (dummy VITE_* values OK)"
+        type: string
+        required: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: npm
+
+      - run: npm ci --include=dev
+
+      - name: Create .env
+        run: printf '%s\n' "$ENV_FILE" > .env
+        env:
+          ENV_FILE: ${{ inputs.env-file }}
+
+      - run: npm run lint
+      - run: npm test
+
+      - run: npm run build
+
+      - name: Verify dist/
+        run: |
+          if [ ! -f dist/index.html ]; then
+            echo "::error::dist/index.html not found — Vite build may have failed"
+            exit 1
+          fi
