@@ -6,9 +6,9 @@ Reusable CI/CD workflows for all TatanCorp services.
 
 | Workflow | Purpose | Used by |
 |---|---|---|
-| `ci-nextjs.yml` | Lint + Vitest + Next.js build | site, cvbuilder |
+| `ci-vite.yml` | Lint + Vitest + Vite build | site, cvbuilder |
 | `ci-python.yml` | Pytest suite | backend |
-| `deploy-nextjs.yml` | Build + SSH/rsync deploy | site, cvbuilder |
+| `deploy-vite.yml` | Build + SSH/rsync deploy | site, cvbuilder |
 | `deploy-python.yml` | SSH/rsync deploy | backend |
 | `report-failure.yml` | Auto-create issue + assign Copilot on failure | all |
 
@@ -17,7 +17,7 @@ Reusable CI/CD workflows for all TatanCorp services.
 ```yaml
 jobs:
   test:
-    uses: ethanke/.github/.github/workflows/ci-nextjs.yml@main
+    uses: ethanke/.github/.github/workflows/ci-vite.yml@main
     with:
       env-file: |
         MY_VAR=value
@@ -26,7 +26,7 @@ jobs:
   deploy:
     needs: test
     if: github.event_name == 'push'
-    uses: ethanke/.github/.github/workflows/deploy-nextjs.yml@main
+    uses: ethanke/.github/.github/workflows/deploy-vite.yml@main
     with:
       app-name: my-app
       env-file: |
